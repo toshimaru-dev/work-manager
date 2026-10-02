@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseCsv } from './importers/csv';
 import { parseIcs } from './importers/ics';
+import { parsePst } from './importers/pst';
 import { parseWorkContentCsv } from './importers/workContents';
 import { ExtensionToWebview, WebviewToExtension } from './shared/types';
 import { Store } from './store';
@@ -87,16 +88,21 @@ export class WorkManagerPanel {
       (await vscode.window.showOpenDialog({
         canSelectMany: false,
         title: '予定表ファイルを選択',
-        filters: { '予定表 (ICS / CSV)': ['ics', 'csv'] },
+        filters: { '予定表 (ICS / CSV / PST)': ['ics', 'csv', 'pst', 'ost'] },
       })) ?? [];
     if (!uri) return;
 
     try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      const text = decode(bytes);
       const from = new Date(`${rangeStart}T00:00:00`);
       const to = new Date(`${rangeEnd}T23:59:59`);
-      const events = uri.path.toLowerCase().endsWith('.csv') ? parseCsv(text, from, to) : parseIcs(text, from, to);
+      const ext = path.extname(uri.fsPath).toLowerCase();
+      // PST は数GBになることがあるため、全体を読み込まずファイルから必要な部分だけ読む
+      const events =
+        ext === '.pst' || ext === '.ost'
+          ? parsePst(uri.fsPath, from, to)
+          : ext === '.csv'
+            ? parseCsv(decode(await vscode.workspace.fs.readFile(uri)), from, to)
+            : parseIcs(decode(await vscode.workspace.fs.readFile(uri)), from, to);
       this.post({ type: 'calendarEvents', fileName: path.basename(uri.fsPath), events });
     } catch (e) {
       this.post({ type: 'calendarError', message: e instanceof Error ? e.message : String(e) });

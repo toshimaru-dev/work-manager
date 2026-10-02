@@ -1,6 +1,6 @@
 # 業務管理 (Work Manager) — VS Code 拡張機能
 
-予定表 (ICS / CSV) から稼働を取り込み、稼働時間の集計と人事目標の進捗を管理する VS Code 拡張機能です。
+予定表 (ICS / CSV / PST) から稼働を取り込み、稼働時間の集計と人事目標の進捗を管理する VS Code 拡張機能です。
 UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成しています。
 
 ## 機能
@@ -9,7 +9,7 @@ UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成し
 | --- | --- |
 | ダッシュボード | 月間稼働 / 今週の稼働 / 未分類の稼働 / 人事目標の進捗、日別×案件の積み上げグラフ、案件別内訳 |
 | 稼働入力 | 案件コード（必須）＋作業コードを指定して稼働を手入力・編集・削除。未設定の稼働の絞り込み |
-| 予定取込 | ICS / CSV を読み込み、案件コード・作業コードを割り当てて稼働として登録（取込済みの予定は自動で除外） |
+| 予定取込 | ICS / CSV / PST を読み込み、案件コード・作業コードを割り当てて稼働として登録（取込済みの予定は自動で除外） |
 | 月次集計 | **別システム入力用の一覧**（案件コード・作業コード・作業内訳名称・稼働時間）。値のクリックコピー、表のコピー（Excel 貼付）、CSV 出力、入力済チェック。稼働時間の手動調整・Outlook にない稼働の行追加・丸め単位・勤怠の総労働時間との差分確認。カレンダー表示 |
 | 人事目標 | 評価期間・ウェイト・期限つきの目標管理、進捗と振り返りメモの記録 |
 | コード管理 | 案件コードと、案件ごとの作業コードの登録・編集・無効化。作業内容マスタ CSV の読み込み |
@@ -37,6 +37,7 @@ UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成し
 
 - **ICS**: Google カレンダー / Outlook 等のエクスポート。繰り返し予定・例外・タイムゾーンに対応
 - **CSV**: Outlook のエクスポート形式（日本語/英語の列名）、または `日付,開始,終了,タイトル` 形式。UTF-8 / Shift_JIS 自動判別
+- **PST / OST**: 新しい Outlook 等のエクスポート。予定表フォルダの予定だけを読み込む。繰り返し予定（削除・変更された回を含む）・タイムゾーンに対応し、キャンセル済みの会議は除外
 
 ## データの保存先
 
@@ -62,7 +63,7 @@ src/                  拡張機能本体 (Node)
   extension.ts        コマンド・ステータスバー登録
   panel.ts            Webview パネル、メッセージ処理、ファイル選択/保存
   store.ts            globalState への永続化
-  importers/          ICS (ical.js) / CSV (papaparse) の解析
+  importers/          ICS (ical.js) / CSV (papaparse) / PST (pst-extractor) の解析
   shared/types.ts     拡張機能と Webview で共有する型・メッセージ定義
 webview/              UI (React + Tremor)
   src/pages/          各タブの画面

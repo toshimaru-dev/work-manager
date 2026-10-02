@@ -71,7 +71,7 @@ export function Dashboard({ month, onMonthChange, onNavigate }: MonthProps & { o
 
       {data.projects.length === 0 && (
         <Callout title="はじめに" icon={RiInformationLine} color="blue" className="mb-6">
-          まず「コード管理」タブで案件コード・作業コードを登録し、「予定取込」タブから予定表 (ICS / CSV) を取り込んでください。
+          まず「コード管理」タブで案件コード・作業コードを登録し、「予定取込」タブから予定表 (ICS / CSV / PST) を取り込んでください。
           <span className="mt-3 block">
             <Button size="xs" onClick={() => onNavigate(TAB.codes)}>
               案件コードを登録する

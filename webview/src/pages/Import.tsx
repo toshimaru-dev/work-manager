@@ -148,7 +148,7 @@ export function Import() {
 
   return (
     <div>
-      <PageHeader title="予定取込" description="予定表 (ICS / CSV) を読み込み、選択した予定を稼働として登録します。" />
+      <PageHeader title="予定取込" description="予定表 (ICS / CSV / PST) を読み込み、選択した予定を稼働として登録します。" />
 
       <Card>
         <div className="flex flex-wrap items-end gap-4">
@@ -178,6 +178,9 @@ export function Import() {
             <li>
               <b>Outlook（クラシック）</b>: ファイル → 開く/エクスポート → インポート/エクスポート → ファイルにエクスポート →
               テキスト ファイル (CSV)。または予定表を「名前を付けて保存」で .ics
+            </li>
+            <li>
+              <b>新しい Outlook</b>: PST ファイルにエクスポートし、その .pst を選択（メールも含まれますが、予定表だけを読み込みます）
             </li>
             <li>
               <b>独自 CSV</b>: 「日付, 開始, 終了, タイトル」の列名を持つ CSV（例: <code>2026/10/02,09:00,10:30,定例会議</code>）
