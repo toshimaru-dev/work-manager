@@ -6,39 +6,44 @@ import {
   Card,
   Dialog,
   DialogPanel,
-  Divider,
   Flex,
   Grid,
   Metric,
   NumberInput,
   ProgressBar,
   ProgressCircle,
+  Tab,
+  TabGroup,
+  TabList,
   Text,
   Textarea,
   TextInput,
   Title,
 } from '@tremor/react';
 import { RiAddLine, RiEditLine, RiLineChartLine } from '@remixicon/react';
-import { Goal, GoalStatus } from '@shared/types';
+import { fiscalTermOf, Goal, GOAL_TERMS, GoalStatus, GoalTerm } from '@shared/types';
 import { ConfirmButton, EmptyState, Field, NativeInput, NativeSelect, PageHeader } from '../components/ui';
 import { uid, useAppData } from '../lib/data';
 import { daysUntil, todayKey } from '../lib/date';
 import { GOAL_STATUS, weightedProgress } from '../lib/stats';
 
 const STATUSES = Object.keys(GOAL_STATUS) as GoalStatus[];
+const TERMS = Object.keys(GOAL_TERMS) as GoalTerm[];
+/** よく使うカテゴリ。この順で先に並べ、それ以外は名前順 */
+const PRESET_CATEGORIES = ['業績', '能力開発', '組織貢献'];
+const UNCATEGORIZED = '未分類';
 
-const defaultPeriod = () => {
-  const d = new Date();
-  // 4月始まりの年度で上期/下期を判定
-  const fy = d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
-  return `${fy}年度${d.getMonth() >= 3 && d.getMonth() < 9 ? '上期' : '下期'}`;
-};
+type TermFilter = GoalTerm | 'all';
+const TERM_FILTERS: TermFilter[] = ['all', ...TERMS];
 
-const newGoal = (period: string): Goal => ({
+const periodLabel = (fiscalYear: number, term: GoalTerm) => `${fiscalYear}年度 ${GOAL_TERMS[term].label}`;
+
+const newGoal = (fiscalYear: number, term: GoalTerm): Goal => ({
   id: uid(),
   title: '',
   category: '業績',
-  period,
+  fiscalYear,
+  term,
   weight: 20,
   criteria: '',
   dueDate: '',
@@ -47,41 +52,79 @@ const newGoal = (period: string): Goal => ({
   updates: [],
 });
 
+function groupByCategory(goals: Goal[]): [string, Goal[]][] {
+  const map = new Map<string, Goal[]>();
+  for (const g of goals) {
+    const c = g.category.trim() || UNCATEGORIZED;
+    map.set(c, [...(map.get(c) ?? []), g]);
+  }
+  const rank = (c: string) => (PRESET_CATEGORIES.includes(c) ? PRESET_CATEGORIES.indexOf(c) : c === UNCATEGORIZED ? 999 : 100);
+  return [...map].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b, 'ja'));
+}
+
 type DialogState = { mode: 'edit'; goal: Goal; isNew: boolean } | { mode: 'progress'; goal: Goal } | null;
 
 export function Goals() {
   const { data, save } = useAppData();
-  const periods = useMemo(() => [...new Set(data.goals.map((g) => g.period))].sort().reverse(), [data.goals]);
-  const [period, setPeriod] = useState(() => periods[0] ?? '');
+  const current = fiscalTermOf(new Date());
+  const [year, setYear] = useState(current.fiscalYear);
+  const [termFilter, setTermFilter] = useState<TermFilter>('all');
   const [dialog, setDialog] = useState<DialogState>(null);
 
-  const goals = data.goals.filter((g) => !period || g.period === period);
-  const totalWeight = goals.reduce((s, g) => s + g.weight, 0);
+  const years = useMemo(
+    () =>
+      [...new Set([current.fiscalYear - 1, current.fiscalYear, current.fiscalYear + 1, ...data.goals.map((g) => g.fiscalYear)])].sort(
+        (a, b) => b - a,
+      ),
+    [data.goals, current.fiscalYear],
+  );
+  const categories = useMemo(
+    () => [...new Set([...PRESET_CATEGORIES, ...data.goals.map((g) => g.category.trim()).filter(Boolean)])],
+    [data.goals],
+  );
+
+  const yearGoals = data.goals.filter((g) => g.fiscalYear === year);
+  const goals = yearGoals.filter((g) => termFilter === 'all' || g.term === termFilter);
+  // 「すべて」では目標のある区分だけ、区分を選んだときは空でもその区分を表示
+  const sections = TERMS.filter((t) => (termFilter === 'all' ? goals.some((g) => g.term === t) : t === termFilter));
   const progress = weightedProgress(goals);
 
   const upsert = (goal: Goal) => {
     const exists = data.goals.some((g) => g.id === goal.id);
     save('goals', exists ? data.goals.map((g) => (g.id === goal.id ? goal : g)) : [...data.goals, goal]);
-    if (!period || !exists) setPeriod(goal.period);
+    // 保存した目標が見える期間に切り替える
+    setYear(goal.fiscalYear);
+    if (termFilter !== 'all' && termFilter !== goal.term) setTermFilter(goal.term);
     setDialog(null);
+  };
+
+  const addGoal = (term?: GoalTerm) => {
+    const t = term ?? (termFilter !== 'all' ? termFilter : year === current.fiscalYear ? current.term : 'full');
+    setDialog({ mode: 'edit', goal: newGoal(year, t), isNew: true });
   };
 
   return (
     <div>
       <PageHeader
         title="人事目標"
-        description="評価期間ごとの目標と進捗を管理します。"
+        description="年度・評価期間ごとに、カテゴリ別で目標と進捗を管理します。"
         actions={
           <>
-            <NativeSelect value={period} onChange={(e) => setPeriod(e.target.value)} className="w-44">
-              <option value="">すべての期間</option>
-              {periods.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+            <NativeSelect value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-32">
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}年度
                 </option>
               ))}
             </NativeSelect>
-            <Button icon={RiAddLine} onClick={() => setDialog({ mode: 'edit', goal: newGoal(period || defaultPeriod()), isNew: true })}>
+            <TabGroup index={TERM_FILTERS.indexOf(termFilter)} onIndexChange={(i) => setTermFilter(TERM_FILTERS[i])} className="w-auto">
+              <TabList variant="solid">
+                {TERM_FILTERS.map((t) => (
+                  <Tab key={t}>{t === 'all' ? 'すべて' : GOAL_TERMS[t].label}</Tab>
+                ))}
+              </TabList>
+            </TabGroup>
+            <Button icon={RiAddLine} onClick={() => addGoal()}>
               目標を追加
             </Button>
           </>
@@ -101,9 +144,13 @@ export function Goals() {
           </Flex>
         </Card>
         <Card>
-          <Text>ウェイト合計</Text>
-          <Metric className={totalWeight !== 100 && goals.length ? 'text-amber-500' : ''}>{totalWeight}%</Metric>
-          <Text className="mt-2">{totalWeight === 100 || !goals.length ? '目標数 ' + goals.length + '件' : '合計が 100% になるよう調整してください'}</Text>
+          <Text>目標数</Text>
+          <Metric>{goals.length}件</Metric>
+          <Text className="mt-2">
+            {TERMS.filter((t) => termFilter === 'all' || t === termFilter)
+              .map((t) => `${GOAL_TERMS[t].label} ${goals.filter((g) => g.term === t).length}件`)
+              .join(' / ')}
+          </Text>
         </Card>
         <Card>
           <Text>ステータス</Text>
@@ -117,27 +164,37 @@ export function Goals() {
         </Card>
       </Grid>
 
-      {goals.length === 0 ? (
-        <div className="mt-4">
-          <EmptyState>目標がありません。「目標を追加」から登録してください。</EmptyState>
+      {sections.length === 0 ? (
+        <div className="mt-6">
+          <EmptyState>{year}年度の目標がありません。「目標を追加」から登録してください。</EmptyState>
         </div>
       ) : (
-        <Grid numItemsLg={2} className="mt-4 gap-4">
-          {goals.map((g) => (
-            <GoalCard
-              key={g.id}
-              goal={g}
-              onEdit={() => setDialog({ mode: 'edit', goal: g, isNew: false })}
-              onProgress={() => setDialog({ mode: 'progress', goal: g })}
-              onDelete={() => save('goals', data.goals.filter((x) => x.id !== g.id))}
-            />
-          ))}
-        </Grid>
+        sections.map((term) => (
+          <PeriodSection
+            key={term}
+            fiscalYear={year}
+            term={term}
+            goals={goals.filter((g) => g.term === term)}
+            onAdd={() => addGoal(term)}
+            onEdit={(g) => setDialog({ mode: 'edit', goal: g, isNew: false })}
+            onProgress={(g) => setDialog({ mode: 'progress', goal: g })}
+            onDelete={(g) => save('goals', data.goals.filter((x) => x.id !== g.id))}
+          />
+        ))
       )}
 
       <Dialog open={dialog !== null} onClose={() => setDialog(null)} static>
         <DialogPanel className="max-w-xl">
-          {dialog?.mode === 'edit' && <GoalForm initial={dialog.goal} isNew={dialog.isNew} onSave={upsert} onCancel={() => setDialog(null)} />}
+          {dialog?.mode === 'edit' && (
+            <GoalForm
+              initial={dialog.goal}
+              isNew={dialog.isNew}
+              years={years}
+              categories={categories}
+              onSave={upsert}
+              onCancel={() => setDialog(null)}
+            />
+          )}
           {dialog?.mode === 'progress' && <ProgressForm goal={dialog.goal} onSave={upsert} onCancel={() => setDialog(null)} />}
         </DialogPanel>
       </Dialog>
@@ -145,77 +202,159 @@ export function Goals() {
   );
 }
 
-function GoalCard({ goal: g, onEdit, onProgress, onDelete }: { goal: Goal; onEdit: () => void; onProgress: () => void; onDelete: () => void }) {
+type GoalHandlers = { onEdit: (g: Goal) => void; onProgress: (g: Goal) => void; onDelete: (g: Goal) => void };
+
+function PeriodSection({
+  fiscalYear,
+  term,
+  goals,
+  onAdd,
+  ...handlers
+}: { fiscalYear: number; term: GoalTerm; goals: Goal[]; onAdd: () => void } & GoalHandlers) {
+  const totalWeight = goals.reduce((s, g) => s + g.weight, 0);
+  const progress = weightedProgress(goals);
+  return (
+    <section className="mt-8">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-tremor-border pb-3 dark:border-dark-tremor-border">
+        <div>
+          <Title>{periodLabel(fiscalYear, term)}</Title>
+          <Text>
+            {GOAL_TERMS[term].months} · {goals.length}件
+          </Text>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          {goals.length > 0 && (
+            <>
+              <Badge color={totalWeight === 100 ? 'emerald' : 'amber'} tooltip={totalWeight === 100 ? undefined : '合計が 100% になるよう調整してください'}>
+                ウェイト合計 {totalWeight}%
+              </Badge>
+              <div className="w-48">
+                <Flex>
+                  <Text>加重平均進捗</Text>
+                  <Text className="font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">{progress}%</Text>
+                </Flex>
+                <ProgressBar value={progress} color="violet" className="mt-1" />
+              </div>
+            </>
+          )}
+          <Button size="xs" variant="secondary" icon={RiAddLine} onClick={onAdd}>
+            追加
+          </Button>
+        </div>
+      </div>
+
+      {goals.length === 0 ? (
+        <div className="mt-4">
+          <EmptyState>{periodLabel(fiscalYear, term)}の目標はまだありません。</EmptyState>
+        </div>
+      ) : (
+        <Grid numItemsMd={2} numItemsLg={3} className="mt-4 items-start gap-4">
+          {groupByCategory(goals).map(([category, items]) => (
+            <Card key={category} className="p-0">
+              <div className="border-b border-tremor-border px-5 py-3 dark:border-dark-tremor-border">
+                <Flex>
+                  <span className="text-tremor-default font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">{category}</span>
+                  <Text className="text-tremor-label">
+                    {items.length}件 · ウェイト {items.reduce((s, g) => s + g.weight, 0)}%
+                  </Text>
+                </Flex>
+                <Flex className="mt-2 gap-3">
+                  <ProgressBar value={weightedProgress(items)} color="violet" />
+                  <Text className="shrink-0 text-tremor-label">{weightedProgress(items)}%</Text>
+                </Flex>
+              </div>
+              <ul className="divide-y divide-tremor-border dark:divide-dark-tremor-border">
+                {items.map((g) => (
+                  <GoalRow
+                    key={g.id}
+                    goal={g}
+                    onEdit={() => handlers.onEdit(g)}
+                    onProgress={() => handlers.onProgress(g)}
+                    onDelete={() => handlers.onDelete(g)}
+                  />
+                ))}
+              </ul>
+            </Card>
+          ))}
+        </Grid>
+      )}
+    </section>
+  );
+}
+
+function GoalRow({ goal: g, onEdit, onProgress, onDelete }: { goal: Goal; onEdit: () => void; onProgress: () => void; onDelete: () => void }) {
   const st = GOAL_STATUS[g.status];
   const remaining = g.dueDate ? daysUntil(g.dueDate) : null;
+  const latest = g.updates[g.updates.length - 1];
   return (
-    <Card decoration="left" decorationColor={st.color}>
-      <Flex alignItems="start">
+    <li className="px-5 py-4">
+      <Flex alignItems="start" className="gap-2">
         <div className="min-w-0">
           <Flex justifyContent="start" className="gap-2">
-            <Badge size="xs" color="slate">
-              {g.category || '未分類'}
-            </Badge>
             <Badge size="xs" color={st.color}>
               {st.label}
             </Badge>
             <Text className="text-tremor-label">ウェイト {g.weight}%</Text>
           </Flex>
-          <Title className="mt-2">{g.title}</Title>
+          <p className="mt-1.5 font-medium text-tremor-content-strong dark:text-dark-tremor-content-strong">{g.title}</p>
         </div>
         <div className="flex shrink-0">
+          <Button size="xs" variant="light" icon={RiLineChartLine} onClick={onProgress} tooltip="進捗を記録" />
           <Button size="xs" variant="light" icon={RiEditLine} onClick={onEdit} tooltip="編集" />
           <ConfirmButton onConfirm={onDelete} />
         </div>
       </Flex>
-      {g.criteria && <Text className="mt-2 whitespace-pre-wrap">{g.criteria}</Text>}
-
-      <Flex className="mt-4">
-        <Text>
-          進捗 <span className="font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">{g.progress}%</span>
+      {g.criteria && (
+        <Text className="mt-1 line-clamp-2 whitespace-pre-wrap" title={g.criteria}>
+          {g.criteria}
         </Text>
-        {g.dueDate && (
-          <Text className={remaining !== null && remaining < 0 && g.status !== 'done' ? 'text-rose-500' : ''}>
-            期限 {g.dueDate}
-            {remaining !== null && g.status !== 'done' && (remaining >= 0 ? `（残り${remaining}日）` : `（${-remaining}日超過）`)}
-          </Text>
-        )}
-      </Flex>
-      <ProgressBar value={g.progress} color={st.color} className="mt-2" />
-
-      {g.updates.length > 0 && (
-        <>
-          <Divider className="my-4" />
-          <ul className="space-y-2">
-            {g.updates
-              .slice(-3)
-              .reverse()
-              .map((u, i) => (
-                <li key={i} className="text-tremor-default">
-                  <span className="mr-2 text-tremor-label text-tremor-content-subtle dark:text-dark-tremor-content-subtle">
-                    {u.date} · {u.progress}%
-                  </span>
-                  <span className="whitespace-pre-wrap">{u.note}</span>
-                </li>
-              ))}
-          </ul>
-        </>
       )}
-      <Button size="xs" variant="secondary" icon={RiLineChartLine} onClick={onProgress} className="mt-4">
-        進捗を記録
-      </Button>
-    </Card>
+
+      <Flex className="mt-3 gap-3">
+        <ProgressBar value={g.progress} color={st.color} />
+        <Text className="shrink-0 font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">{g.progress}%</Text>
+      </Flex>
+      {g.dueDate && (
+        <Text className={`mt-1 text-tremor-label ${remaining !== null && remaining < 0 && g.status !== 'done' ? 'text-rose-500' : ''}`}>
+          期限 {g.dueDate}
+          {remaining !== null && g.status !== 'done' && (remaining >= 0 ? `（残り${remaining}日）` : `（${-remaining}日超過）`)}
+        </Text>
+      )}
+      {latest && (
+        <Text className="mt-2 line-clamp-2 text-tremor-label" title={latest.note}>
+          <span className="text-tremor-content-subtle dark:text-dark-tremor-content-subtle">
+            {latest.date} · {latest.progress}%
+          </span>{' '}
+          {latest.note}
+        </Text>
+      )}
+    </li>
   );
 }
 
-function GoalForm({ initial, isNew, onSave, onCancel }: { initial: Goal; isNew: boolean; onSave: (g: Goal) => void; onCancel: () => void }) {
+function GoalForm({
+  initial,
+  isNew,
+  years,
+  categories,
+  onSave,
+  onCancel,
+}: {
+  initial: Goal;
+  isNew: boolean;
+  years: number[];
+  categories: string[];
+  onSave: (g: Goal) => void;
+  onCancel: () => void;
+}) {
   const [g, setG] = useState(initial);
   const set = <K extends keyof Goal>(k: K, v: Goal[K]) => setG({ ...g, [k]: v });
+  const yearOptions = [...new Set([...years, g.fiscalYear])].sort((a, b) => b - a);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (g.title.trim()) onSave(g);
+        if (g.title.trim()) onSave({ ...g, category: g.category.trim() });
       }}
     >
       <Title>{isNew ? '目標を追加' : '目標を編集'}</Title>
@@ -223,11 +362,31 @@ function GoalForm({ initial, isNew, onSave, onCancel }: { initial: Goal; isNew: 
         <Field label="目標" className="col-span-2">
           <TextInput value={g.title} onValueChange={(v) => set('title', v)} placeholder="例: 新規案件の受注 3件" required />
         </Field>
-        <Field label="カテゴリ">
-          <TextInput value={g.category} onValueChange={(v) => set('category', v)} placeholder="業績 / 能力開発 / 組織貢献" />
+        <Field label="年度">
+          <NativeSelect value={g.fiscalYear} onChange={(e) => set('fiscalYear', Number(e.target.value))}>
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}年度
+              </option>
+            ))}
+          </NativeSelect>
         </Field>
         <Field label="評価期間">
-          <TextInput value={g.period} onValueChange={(v) => set('period', v)} placeholder="2026年度下期" />
+          <NativeSelect value={g.term} onChange={(e) => set('term', e.target.value as GoalTerm)}>
+            {TERMS.map((t) => (
+              <option key={t} value={t}>
+                {GOAL_TERMS[t].label}（{GOAL_TERMS[t].months}）
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="カテゴリ">
+          <NativeInput list="goal-categories" value={g.category} onChange={(e) => set('category', e.target.value)} placeholder="業績 / 能力開発 / 組織貢献" />
+          <datalist id="goal-categories">
+            {categories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
         </Field>
         <Field label="ウェイト (%)">
           <NumberInput value={g.weight} onValueChange={(v) => set('weight', v || 0)} min={0} max={100} step={5} />
@@ -235,7 +394,7 @@ function GoalForm({ initial, isNew, onSave, onCancel }: { initial: Goal; isNew: 
         <Field label="期限">
           <NativeInput type="date" value={g.dueDate} onChange={(e) => set('dueDate', e.target.value)} />
         </Field>
-        <Field label="ステータス" className="col-span-2">
+        <Field label="ステータス">
           <NativeSelect value={g.status} onChange={(e) => set('status', e.target.value as GoalStatus)}>
             {STATUSES.map((s) => (
               <option key={s} value={s}>

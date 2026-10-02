@@ -3,6 +3,16 @@
 予定表 (ICS / CSV / PST) から稼働を取り込み、稼働時間の集計と人事目標の進捗を管理する VS Code 拡張機能です。
 UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成しています。
 
+## インストール
+
+1. [Releases](https://github.com/toshimaru-dev/work-manager/releases) から最新の `work-manager-x.y.z.vsix` をダウンロード
+2. 次のどちらかでインストール（古いバージョンは上書きされます）
+   - ターミナル: `code --install-extension work-manager-x.y.z.vsix`
+   - VS Code: 拡張機能ビュー → 「…」→「VSIX からのインストール」
+3. コマンドパレット（`Ctrl+Shift+P`）で `業務管理を開く` を実行
+
+ステータスバーに本日の稼働時間が表示され、クリックでも画面を開けます。
+
 ## 機能
 
 | タブ | 内容 |
@@ -11,7 +21,7 @@ UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成し
 | 稼働入力 | 案件コード（必須）＋作業コードを指定して稼働を手入力・編集・削除。未設定の稼働の絞り込み |
 | 予定取込 | ICS / CSV / PST を読み込み、案件コード・作業コードを割り当てて稼働として登録（取込済みの予定は自動で除外） |
 | 月次集計 | **別システム入力用の一覧**（案件コード・作業コード・作業内訳名称・稼働時間）。値のクリックコピー、表のコピー（Excel 貼付）、CSV 出力、入力済チェック。稼働時間の手動調整・Outlook にない稼働の行追加・丸め単位・勤怠の総労働時間との差分確認。カレンダー表示 |
-| 人事目標 | 評価期間・ウェイト・期限つきの目標管理、進捗と振り返りメモの記録 |
+| 人事目標 | 年度＋評価期間（通期 / 上期 / 下期）・ウェイト・期限つきの目標管理。期間→カテゴリでグループ表示し、それぞれの加重平均進捗とウェイト合計を表示。進捗と振り返りメモの記録 |
 | コード管理 | 案件コードと、案件ごとの作業コードの登録・編集・無効化。作業内容マスタ CSV の読み込み |
 | 設定 | 自動割当ルール（キーワード→案件コード・作業コード）、除外キーワード、所定労働時間 |
 
@@ -23,8 +33,6 @@ UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成し
 作業内容コード,作業内容名称,作業内訳コード,作業内訳名称
 110,プリセールス,20101,その他ソリューション
 ```
-
-ステータスバーに本日の稼働時間が表示され、クリックで画面を開けます。
 
 ### 月次の流れ
 
@@ -39,10 +47,22 @@ UI は [Tremor](https://www.tremor.so/) (v3) + React + Tailwind CSS で構成し
 - **CSV**: Outlook のエクスポート形式（日本語/英語の列名）、または `日付,開始,終了,タイトル` 形式。UTF-8 / Shift_JIS 自動判別
 - **PST / OST**: 新しい Outlook 等のエクスポート。予定表フォルダの予定だけを読み込む。繰り返し予定（削除・変更された回を含む）・タイムゾーンに対応し、キャンセル済みの会議は除外
 
+| 予定表アプリ | 書き出し方法 | 形式 |
+| --- | --- | --- |
+| 新しい Outlook | PST ファイルにエクスポート（CSV / ICS は書き出せない） | PST |
+| Outlook（クラシック） | ファイル → 開く/エクスポート → インポート/エクスポート → テキスト ファイル、または予定表を「名前を付けて保存」 | CSV / ICS |
+| Google カレンダー | 設定 → インポート/エクスポート → エクスポート（ZIP 内の .ics） | ICS |
+
+再エクスポートしたファイルを取り込んでも、取込済みの予定は「日時＋件名」（ICS は UID）で判別して除外されます。
+
 ## データの保存先
 
 VS Code の `globalState` に保存されます（全ワークスペース共通）。
 コマンドパレットの `Work Manager: データをバックアップ (JSON 書き出し)` / `Work Manager: バックアップから復元 (JSON 読み込み)` でバックアップできます。
+別の PC へデータを移すときも、この書き出し → 復元を使います。
+
+> 復元は現在のデータを**すべて置き換えます**（マージはしません）。必要なら先にバックアップを取ってください。
+> 旧バージョンのデータ（自由入力の評価期間「2026年度上期」など）は読み込み時に自動で現在の形式へ変換されます。
 
 ## 開発
 
@@ -54,7 +74,14 @@ npm run typecheck    # 型チェック
 
 - **デバッグ実行**: VS Code でこのフォルダを開き `F5`（「拡張機能を実行」）→ 開いたウィンドウでコマンドパレットから `業務管理を開く`
 - **UI だけをブラウザで確認**: `npx vite --config webview/vite.config.mts` （データは localStorage に保存されるモックで動作）
-- **VSIX 作成**: `npm run package` → `code --install-extension work-manager-0.1.0.vsix`
+- **VSIX 作成**: `npm run package` → `work-manager-<version>.vsix` が生成される（`*.vsix` は Git 管理外）
+
+### リリース手順
+
+1. `npm version <x.y.z> --no-git-tag-version` で `package.json` のバージョンを更新
+2. `npm run package` で VSIX を作成
+3. 変更をコミットして push
+4. `gh release create v<x.y.z> work-manager-<x.y.z>.vsix --title "v<x.y.z>" --notes "<変更内容>"` で Release を作成し VSIX を添付
 
 ## 構成
 
@@ -71,3 +98,4 @@ webview/              UI (React + Tremor)
 ```
 
 > 補足: Dropbox 同期フォルダ内では Vite の出力先削除が失敗することがあるため、`emptyOutDir: false` にしています（出力ファイル名は固定）。
+> 同じ理由で `npx vite` の起動時に `node_modules/.vite/deps` の削除が `EBUSY` で失敗することがあります。その場合は Dropbox の同期を一時停止するか、`cacheDir` を Dropbox 外に向けた設定で起動してください。

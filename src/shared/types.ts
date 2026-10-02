@@ -86,6 +86,21 @@ export const emptyLine = (): ReportLine => ({ contentCode: '', breakdownCode: ''
 
 export type GoalStatus = 'notStarted' | 'onTrack' | 'atRisk' | 'done';
 
+/** 評価期間の区分（4月始まりの年度） */
+export type GoalTerm = 'full' | 'first' | 'second';
+
+export const GOAL_TERMS: Record<GoalTerm, { label: string; months: string }> = {
+  full: { label: '通期', months: '4月〜3月' },
+  first: { label: '上期', months: '4月〜9月' },
+  second: { label: '下期', months: '10月〜3月' },
+};
+
+/** 日付が属する年度と上期/下期 */
+export function fiscalTermOf(d: Date): { fiscalYear: number; term: GoalTerm } {
+  const m = d.getMonth();
+  return { fiscalYear: m < 3 ? d.getFullYear() - 1 : d.getFullYear(), term: m >= 3 && m < 9 ? 'first' : 'second' };
+}
+
 export interface GoalUpdate {
   date: string;
   progress: number;
@@ -96,8 +111,9 @@ export interface Goal {
   id: string;
   title: string;
   category: string;
-  /** 評価期間 例: 2026年度上期 */
-  period: string;
+  /** 評価期間の年度（4月始まり） */
+  fiscalYear: number;
+  term: GoalTerm;
   /** ウェイト(%) */
   weight: number;
   /** 達成基準 */
@@ -180,8 +196,18 @@ export function normalizeData(saved: LegacyData | undefined): AppData {
     projects: d.projects.map((p) => ({ ...p, code: p.code ?? '', note: p.note ?? '', workCodes: p.workCodes ?? [] })),
     entries: d.entries.map((e) => ({ ...e, workCodeId: e.workCodeId ?? null })),
     rules: d.rules.map((r) => ({ ...r, workCodeId: r.workCodeId ?? null })),
+    goals: d.goals.map(normalizeGoal),
     settings: { ...DEFAULT_DATA.settings, ...saved?.settings },
   };
+}
+
+/** 旧形式の自由入力の評価期間（例: 2026年度上期）を年度と区分に変換する */
+function normalizeGoal(g: Goal & { period?: string }): Goal {
+  const { period, ...goal } = g;
+  if (goal.fiscalYear && goal.term) return goal;
+  const m = period?.match(/(\d{4})/);
+  const term: GoalTerm = period?.includes('上') ? 'first' : period?.includes('下') ? 'second' : 'full';
+  return { ...goal, fiscalYear: m ? Number(m[1]) : fiscalTermOf(new Date()).fiscalYear, term };
 }
 
 // ---- Webview <-> 拡張機能 メッセージ ----
