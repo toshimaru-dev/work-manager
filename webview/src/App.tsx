@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@tremor/react';
 import {
   RiCalendarScheduleLine,
@@ -24,19 +24,34 @@ export function App() {
   const [month, setMonth] = useState(currentMonth());
   const monthProps = { month, onMonthChange: setMonth };
 
+  // 固定ヘッダーの高さを CSS 変数に反映し、各画面の sticky 要素をその下に貼り付ける
+  const navRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const observer = new ResizeObserver(() => document.documentElement.style.setProperty('--nav-h', `${nav.offsetHeight}px`));
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="min-h-screen bg-tremor-background-muted text-tremor-content dark:bg-gray-950 dark:text-dark-tremor-content">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 pb-6 pt-3 sm:px-6">
         <TabGroup index={tab} onIndexChange={setTab}>
-          <TabList variant="line" className="flex-wrap">
-            <Tab icon={RiDashboardLine}>ダッシュボード</Tab>
-            <Tab icon={RiFileList3Line}>稼働入力</Tab>
-            <Tab icon={RiCalendarScheduleLine}>予定取込</Tab>
-            <Tab icon={RiTableLine}>月次集計</Tab>
-            <Tab icon={RiFlagLine}>人事目標</Tab>
-            <Tab icon={RiHashtag}>コード管理</Tab>
-            <Tab icon={RiSettings3Line}>設定</Tab>
-          </TabList>
+          <div
+            ref={navRef}
+            className="sticky top-0 z-30 -mx-4 bg-tremor-background-muted px-4 pt-3 dark:bg-gray-950 sm:-mx-6 sm:px-6"
+          >
+            <TabList variant="line" className="flex-wrap">
+              <Tab icon={RiDashboardLine}>ダッシュボード</Tab>
+              <Tab icon={RiFileList3Line}>稼働入力</Tab>
+              <Tab icon={RiCalendarScheduleLine}>予定取込</Tab>
+              <Tab icon={RiTableLine}>月次集計</Tab>
+              <Tab icon={RiFlagLine}>人事目標</Tab>
+              <Tab icon={RiHashtag}>コード管理</Tab>
+              <Tab icon={RiSettings3Line}>設定</Tab>
+            </TabList>
+          </div>
           <TabPanels className="mt-6">
             <TabPanel>
               <Dashboard {...monthProps} onNavigate={setTab} />

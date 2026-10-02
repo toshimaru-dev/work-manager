@@ -19,7 +19,7 @@ import { CalendarEvent, MappingRule, Settings, WorkEntry } from '@shared/types';
 import { CodeSelect } from '../components/codeSelect';
 import { EmptyState, Field, NativeInput, PageHeader } from '../components/ui';
 import { uid, useAppData } from '../lib/data';
-import { currentMonth, fmtHours, formatDay, monthFirstDay, monthLastDay } from '../lib/date';
+import { addMonths, currentMonth, fmtHours, formatDay, monthFirstDay, monthLastDay } from '../lib/date';
 import { onMessage, postMessage } from '../lib/vscode';
 
 type Status = 'new' | 'imported' | 'excluded';
@@ -60,8 +60,9 @@ function matchRule(title: string, rules: MappingRule[]): Assignment {
 
 export function Import() {
   const { data, save, notify } = useAppData();
-  const [rangeStart, setRangeStart] = useState(monthFirstDay(currentMonth()));
-  const [rangeEnd, setRangeEnd] = useState(monthLastDay(currentMonth()));
+  // 稼働の入力は翌月に前月分をまとめて行うことが多いため、既定は先月1か月
+  const [rangeStart, setRangeStart] = useState(() => monthFirstDay(addMonths(currentMonth(), -1)));
+  const [rangeEnd, setRangeEnd] = useState(() => monthLastDay(addMonths(currentMonth(), -1)));
   const [file, setFile] = useState<{ name: string; events: CalendarEvent[] } | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -204,7 +205,7 @@ export function Import() {
             </label>
           </Flex>
 
-          <div className="sticky top-0 z-10 mt-4 flex flex-wrap items-center gap-3 rounded-tremor-default bg-tremor-brand-faint p-3 dark:bg-dark-tremor-brand-faint">
+          <div className="sticky top-[var(--nav-h,0px)] z-10 mt-4 flex flex-wrap items-center gap-3 rounded-tremor-default bg-tremor-brand-faint p-3 dark:bg-dark-tremor-brand-faint">
             <Text className="font-medium text-tremor-content-strong dark:text-dark-tremor-content-strong">
               選択 {selectedRows.length}件（{fmtHours(selectedMinutes)}）
             </Text>
