@@ -1,0 +1,71 @@
+{
+  "name": "work-manager",
+  "displayName": "業務管理 (Work Manager)",
+  "description": "予定表から稼働を取り込み、稼働時間の集計と人事目標の進捗を管理する VS Code 拡張機能",
+  "version": "0.1.0",
+  "publisher": "toshi",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "workManager.open",
+        "title": "業務管理を開く",
+        "category": "Work Manager",
+        "icon": "$(briefcase)"
+      },
+      {
+        "command": "workManager.exportBackup",
+        "title": "データをバックアップ (JSON 書き出し)",
+        "category": "Work Manager"
+      },
+      {
+        "command": "workManager.importBackup",
+        "title": "バックアップから復元 (JSON 読み込み)",
+        "category": "Work Manager"
+      }
+    ]
+  },
+  "scripts": {
+    "build:ext": "node esbuild.mjs",
+    "build:webview": "vite build --config webview/vite.config.mts",
+    "build": "npm run build:ext && npm run build:webview",
+    "watch:ext": "node esbuild.mjs --watch",
+    "watch:webview": "vite build --config webview/vite.config.mts --watch",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p webview",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@headlessui/react": "^2.2.10",
+    "@headlessui/tailwindcss": "^0.2.2",
+    "@remixicon/react": "^4.9.0",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tremor/react": "^3.18.7",
+    "@types/node": "^20.17.0",
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/vscode": "^1.90.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vscode/vsce": "^4.0.0",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.28.2",
+    "ical.js": "^2.2.1",
+    "papaparse": "^5.7.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.2"
+  }
+}

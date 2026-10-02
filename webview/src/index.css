@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* VS Code の Webview 既定スタイル (body の左右 padding) を打ち消す */
+body {
+  padding: 0;
+}
